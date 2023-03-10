@@ -3,7 +3,6 @@
 import { useStore } from "@/utils/store";
 import { Chat } from "./Chat";
 import { Plus, X } from "lucide-react";
-import Link from "next/link";
 import Settings from "./Settings";
 import {
   Select,
@@ -12,8 +11,35 @@ import {
   SelectContent,
   SelectItem,
 } from "@/basic/select";
-import { useRouter } from "next/navigation";
-import { startTransition } from "react";
+import { startTransition, useEffect, useState } from "react";
+
+function useActive(path?: string) {
+  const [active, setActive] = useState(path);
+  const sessions = useStore((state) => Object.keys(state.sessions));
+  let activeId = "";
+  if (!active) {
+    activeId = sessions[0];
+  } else if (sessions.includes(active)) {
+    activeId = active;
+  }
+  useEffect(() => {
+    function handler(evt: PopStateEvent) {
+      startTransition(() => {
+        setActive(evt.state?.id);
+      });
+    }
+    window.addEventListener("popstate", handler);
+    return () => window.removeEventListener("popstate", handler);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  return [
+    activeId,
+    (id?: string) => {
+      setActive(id);
+      window.history.pushState({ id }, "", `/${id}`);
+    },
+  ] as const;
+}
 
 export default function Home({
   path,
@@ -22,19 +48,15 @@ export default function Home({
   path?: string;
   roles: string[];
 }) {
+  const [activeId, setActive] = useActive(path);
   const sessions = useStore((state) => Object.keys(state.sessions));
-  let activeId = "";
-  if (!path) {
-    activeId = sessions[0];
-  } else if (sessions.includes(path)) {
-    activeId = path;
-  }
+
   return (
     <>
       <header className="max-w-full px-2 sm:px-6 lg:px-8">
         <div className="relative flex justify-between h-16 gap-2 sm:gap-4">
           <div className="sm:hidden flex flex-1 items-center">
-            <TabsSelect active={activeId} sessions={sessions} />
+            <TabsSelect active={activeId} setActive={setActive} />
           </div>
           {/** @see https://dfmcphee.com/flex-items-and-min-width-0/ */}
           <div className="hidden sm:flex min-w-0 items-center">
@@ -46,6 +68,7 @@ export default function Home({
                 {sessions.map((id) => (
                   <SessionTabTrigger
                     active={activeId === id}
+                    setActive={setActive}
                     id={id}
                     key={id}
                   />
@@ -77,14 +100,26 @@ function AddSessionButton() {
   );
 }
 
-function SessionTabTrigger({ id, active }: { id: string; active: boolean }) {
+function SessionTabTrigger({
+  id,
+  active,
+  setActive,
+}: {
+  id: string;
+  active: boolean;
+  setActive: (id?: string) => void;
+}) {
   const sessionName = useStore((state) => state.sessions[id].name);
   const removeSession = useStore((state) => state.removeSession);
   return (
-    <Link
+    <a
       data-state={active ? "active" : undefined}
       href={`/${id}`}
-      prefetch={false}
+      onClick={(evt) => {
+        evt.preventDefault();
+        evt.stopPropagation();
+        setActive(id);
+      }}
       className="relative group inline-flex min-w-[100px] items-center justify-center rounded-[0.185rem] px-3 py-1.5  text-sm font-medium text-slate-700 transition-all  disabled:pointer-events-none disabled:opacity-50 data-[state=active]:bg-white data-[state=active]:text-slate-900 data-[state=active]:shadow-sm dark:text-slate-200 dark:data-[state=active]:bg-slate-900 dark:data-[state=active]:text-slate-100"
     >
       {sessionName}
@@ -94,11 +129,12 @@ function SessionTabTrigger({ id, active }: { id: string; active: boolean }) {
           evt.preventDefault();
           evt.stopPropagation();
           removeSession(id);
+          setActive();
         }}
       >
         <X width="0.75rem" height="0.75rem" />
       </button>
-    </Link>
+    </a>
   );
 }
 
@@ -112,13 +148,13 @@ function SessionSelectItem({ value: id }: { value: string }) {
 }
 
 function TabsSelect({
-  sessions,
   active,
+  setActive,
 }: {
-  sessions: string[];
   active: string;
+  setActive: (id: string) => void;
 }) {
-  const router = useRouter();
+  const sessions = useStore((state) => Object.keys(state.sessions));
   const addSession = useStore((state) => state.addSession);
   const removeSession = useStore((state) => state.removeSession);
 
@@ -126,7 +162,8 @@ function TabsSelect({
     <Select
       onValueChange={(id) =>
         startTransition(() => {
-          router.push(`/${id}`);
+          setActive(id);
+          window.history.pushState({}, "", `/${id}`);
         })
       }
       value={active}
