@@ -96,7 +96,7 @@ export const useStore = create(
               ...sessions.default,
               messages: [],
             };
-            delete sessions.default.role;
+            // delete sessions.default.role;
           } else {
             delete sessions[id];
           }
